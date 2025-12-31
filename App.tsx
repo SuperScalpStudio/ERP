@@ -1,0 +1,433 @@
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
+import { 
+  PackagePlus, 
+  ShoppingCart, 
+  Package, 
+  History,
+  Trash2,
+  Search,
+  Edit2,
+  Camera,
+  X
+} from 'lucide-react';
+import { Html5Qrcode } from 'html5-qrcode';
+import { Product, Transaction, TransactionType, InventoryState } from './types';
+
+// --- 配置區 ---
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyl7qt2kIZHw45ghHLCqicGwhRipn36wLE-eHwiua6bSyxApbiEJ7zh0bPvGMkWpk6A/exec'; 
+
+// --- 核心樣式 ---
+const topBarClass = "h-16 bg-white border-b border-slate-100 flex items-center sticky top-0 z-40 shrink-0";
+const inputClass = "w-full bg-white border border-slate-200/50 rounded-xl py-2.5 px-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm";
+
+// --- 共用組件 ---
+
+const Header = ({ children }: { children: React.ReactNode }) => (
+  <div className={topBarClass}>{children}</div>
+);
+
+const Navigation = () => {
+  const { pathname } = useLocation();
+  const navItems = [
+    { path: '/', icon: <Package size={20} />, label: '庫存' },
+    { path: '/purchase', icon: <PackagePlus size={20} />, label: '進貨' },
+    { path: '/sale', icon: <ShoppingCart size={20} />, label: '銷貨' },
+    { path: '/history', icon: <History size={20} />, label: '貨流' },
+  ];
+
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-slate-100 flex justify-around items-center z-50 px-2 lg:h-screen lg:w-20 lg:flex-col lg:left-0 lg:top-0 lg:border-r lg:border-t-0">
+      {navItems.map((item) => {
+        const active = pathname === item.path;
+        return (
+          <Link key={item.path} to={item.path} className={`flex flex-col items-center justify-center w-16 h-12 rounded-xl transition-all ${active ? 'text-indigo-600 bg-indigo-50' : 'text-slate-400'}`}>
+            {item.icon}
+            <span className="text-[10px] font-bold mt-0.5">{item.label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+};
+
+const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
+  useEffect(() => {
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } }, (text) => {
+      onScan(text);
+      html5QrCode.stop().then(() => onClose());
+    }, undefined).catch(() => { alert("無法開啟相機"); onClose(); });
+    return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(() => {}); };
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <div id="reader" className="w-full aspect-square bg-black"></div>
+        <button onClick={onClose} className="w-full py-5 text-slate-500 font-bold flex items-center justify-center gap-2"><X size={18} /> 關閉掃描器</button>
+      </div>
+    </div>
+  );
+};
+
+// --- 頁面組件 ---
+
+const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (p: Product) => void }) => {
+  const [search, setSearch] = useState('');
+  const [editing, setEditing] = useState<Product | null>(null);
+
+  const stats = useMemo(() => {
+    const cost = Object.values(state.products).reduce((acc, p) => acc + (p.quantity * p.weightedAverageCost), 0);
+    const profit = state.transactions.filter(t => t.type === TransactionType.SALE).reduce((acc, t) => acc + (t.totalProfit || 0), 0);
+    return { cost, profit, count: Object.keys(state.products).length };
+  }, [state]);
+
+  const filtered = Object.values(state.products)
+    .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.toLowerCase().includes(search.toLowerCase()))
+    .sort((a, b) => b.quantity - a.quantity);
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50">
+      <Header>
+        <div className="grid grid-cols-3 w-full divide-x divide-slate-100">
+          <div className="flex flex-col items-center justify-center">
+            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter">庫存資產</p>
+            <p className="text-[13px] font-black text-slate-900">${Math.round(stats.cost).toLocaleString()}</p>
+          </div>
+          <div className="flex flex-col items-center justify-center">
+            <p className="text-[9px] font-extrabold text-indigo-400 uppercase tracking-tighter">累計獲利</p>
+            <p className="text-[13px] font-black text-indigo-600">${Math.round(stats.profit).toLocaleString()}</p>
+          </div>
+          <div className="flex flex-col items-center justify-center">
+            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter">品項總數</p>
+            <p className="text-[13px] font-black text-slate-600">{stats.count}</p>
+          </div>
+        </div>
+      </Header>
+      
+      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-20">
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+          <input type="text" className={inputClass + " pl-10 border-none shadow-sm"} value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="grid gap-2">
+          {filtered.map(p => (
+            <div key={p.barcode} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:bg-slate-50 transition-colors">
+              <div>
+                <h4 className="font-bold text-sm text-slate-800">{p.name}</h4>
+                <p className="text-[10px] font-mono text-slate-400">{p.barcode}</p>
+                <div className="flex gap-3 mt-1.5 items-center">
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${p.quantity <= 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'}`}>存: {p.quantity}</span>
+                  <span className="text-[10px] text-slate-400 font-bold">成本: ${Math.round(p.weightedAverageCost)}</span>
+                </div>
+              </div>
+              <button onClick={() => setEditing(p)} className="text-slate-200 hover:text-indigo-600 p-2"><Edit2 size={16} /></button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-xl">
+            <h3 className="font-black text-sm mb-4">修改品名</h3>
+            <input type="text" className={inputClass} value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})} />
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditing(null)} className="flex-1 py-3 text-sm font-bold text-slate-400">取消</button>
+              <button onClick={() => { onUpdate(editing); setEditing(null); }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold">更新</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType, inventory: Record<string, Product>, onSubmit: (items: any[], type: TransactionType, remarks: string, actualTotal?: number) => void }) => {
+  const [currency, setCurrency] = useState<'TWD' | 'EUR'>(type === TransactionType.PURCHASE ? 'EUR' : 'TWD');
+  const [items, setItems] = useState<any[]>([]);
+  const [barcode, setBarcode] = useState('');
+  const [name, setName] = useState('');
+  const [qty, setQty] = useState('');
+  const [price, setPrice] = useState('');
+  const [scanner, setScanner] = useState(false);
+  const [totalBill, setTotalBill] = useState('');
+  const [remarks, setRemarks] = useState('');
+
+  const bgColor = type === TransactionType.PURCHASE ? 'bg-purple-50' : 'bg-emerald-50';
+
+  const lookup = (code: string) => {
+    setBarcode(code);
+    if (inventory[code]) setName(inventory[code].name);
+    else if (type === TransactionType.SALE) setName('');
+  };
+
+  const addItem = () => {
+    if (!barcode || !name || !qty) return;
+    setItems([{ barcode, name, quantity: Number(qty), price: Number(price) || 0, cost: inventory[barcode]?.weightedAverageCost || 0 }, ...items]);
+    setBarcode(''); setName(''); setQty(''); setPrice('');
+  };
+
+  const handleFinalSubmit = () => {
+    const isEurPurchase = type === TransactionType.PURCHASE && currency === 'EUR';
+    let processedItems = [...items];
+    let finalTotal = items.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+
+    if (isEurPurchase && totalBill) {
+      finalTotal = Number(totalBill);
+      const totalEur = items.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+      const rate = finalTotal / totalEur;
+      processedItems = items.map(i => ({ ...i, price: i.price * rate }));
+    } else if (type === TransactionType.SALE) {
+      processedItems = items.map(i => ({ ...i, profit: i.price - i.cost }));
+    }
+
+    onSubmit(processedItems, type, remarks, finalTotal);
+    
+    // 提交後徹底恢復初始狀態
+    setItems([]);
+    setTotalBill('');
+    setRemarks('');
+    setBarcode('');
+    setName('');
+    setQty('');
+    setPrice('');
+  };
+
+  const currentListTotal = items.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+
+  // 停用數字輸入框的滾輪事件，防止意外加減
+  const handleWheel = (e: React.WheelEvent<HTMLInputElement>) => {
+    (e.target as HTMLInputElement).blur();
+  };
+
+  return (
+    <div className={`flex flex-col h-full ${bgColor}`}>
+      <Header>
+        <div className="px-4 flex w-full justify-between items-center">
+          <div className="flex items-center gap-2">
+            <div className={`p-1.5 rounded-lg ${type === TransactionType.PURCHASE ? 'bg-purple-100 text-purple-600' : 'bg-emerald-100 text-emerald-600'}`}>
+              {type === TransactionType.PURCHASE ? <PackagePlus size={16} /> : <ShoppingCart size={16} />}
+            </div>
+            <span className="font-extrabold text-sm">{type === TransactionType.PURCHASE ? '進貨模式' : '銷貨模式'}</span>
+          </div>
+          {type === TransactionType.PURCHASE && (
+            <div className="bg-slate-200/50 p-1 rounded-xl flex text-[10px] font-black">
+              <button onClick={() => setCurrency('TWD')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'TWD' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>TWD</button>
+              <button onClick={() => setCurrency('EUR')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'EUR' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>EUR</button>
+            </div>
+          )}
+        </div>
+      </Header>
+
+      {scanner && <ScannerModal onScan={lookup} onClose={() => setScanner(false)} />}
+      
+      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-20">
+        <div className="bg-white p-5 rounded-2xl border border-slate-200/50 shadow-sm space-y-4">
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+              <input type="text" placeholder="輸入或掃描條碼..." className={inputClass + " pl-10"} value={barcode} onChange={e => lookup(e.target.value)} />
+            </div>
+            <button onClick={() => setScanner(true)} className="bg-slate-900 text-white p-2.5 rounded-xl active:scale-90 transition-transform"><Camera size={20} /></button>
+          </div>
+          <input type="text" placeholder="商品名稱" className={inputClass} value={name} onChange={e => setName(e.target.value)} />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="relative">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">數量</span>
+              <input type="number" className={inputClass + " font-bold"} value={qty} onWheel={handleWheel} onChange={e => setQty(e.target.value)} />
+            </div>
+            <div className="relative">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">{currency}</span>
+              <input type="number" className={inputClass + " font-bold"} value={price} onWheel={handleWheel} onChange={e => setPrice(e.target.value)} />
+            </div>
+          </div>
+          <button onClick={addItem} className={`w-full py-3.5 ${type === TransactionType.PURCHASE ? 'bg-purple-600' : 'bg-emerald-600'} text-white rounded-xl font-black text-sm active:scale-95 transition-all`}>
+            加入清單
+          </button>
+        </div>
+
+        {items.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex justify-between items-center px-1 mb-1">
+              <h5 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">待處理清單 ({items.length})</h5>
+              <button onClick={() => setItems([])} className="text-[11px] font-bold text-red-400">清空</button>
+            </div>
+            {items.map((item, idx) => (
+              <div key={idx} className="bg-white/80 backdrop-blur-sm p-3 rounded-xl border border-slate-200/50 flex justify-between items-center text-xs shadow-sm">
+                <div className="flex flex-col">
+                  <span className="font-bold text-slate-700">{item.name}</span>
+                  <span className="text-[10px] text-slate-400 font-mono">{item.barcode}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                  <div className="text-right">
+                    <p className="font-black text-slate-900">${item.price}</p>
+                    <p className="text-[10px] font-bold text-slate-400">x {item.quantity}</p>
+                  </div>
+                  <button onClick={() => setItems(items.filter((_, i) => i !== idx))} className="text-slate-200 hover:text-red-500"><Trash2 size={16} /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {items.length > 0 && (
+          <div className="bg-slate-900 text-white p-6 rounded-3xl space-y-4 shadow-xl mt-6">
+            <div className="space-y-4">
+              {type === TransactionType.PURCHASE && currency === 'EUR' ? (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider ml-1">台幣總金額（含運費及稅金）</p>
+                  <input type="number" placeholder="必填：請手動輸入最終總額" className="w-full bg-slate-800 border-none rounded-xl py-3 px-4 text-base text-white font-black placeholder:text-slate-600 placeholder:font-normal" onWheel={handleWheel} value={totalBill} onChange={e => setTotalBill(e.target.value)} />
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider ml-1">當前清單總計</p>
+                  <p className="text-2xl font-black text-white px-1">${currentListTotal.toLocaleString()}</p>
+                </div>
+              )}
+              <div className="space-y-1">
+                <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider ml-1">備註</p>
+                <input type="text" placeholder="(選填)" className="w-full bg-slate-800 border-none rounded-xl py-3 px-4 text-sm text-white font-medium placeholder:text-slate-600" value={remarks} onChange={e => setRemarks(e.target.value)} />
+              </div>
+            </div>
+            <div className="h-px bg-slate-800 my-2" />
+            <button onClick={handleFinalSubmit} className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95 transition-all">
+              確認提交
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const HistoryView = ({ transactions }: { transactions: Transaction[] }) => {
+  const [search, setSearch] = useState('');
+  const filtered = useMemo(() => {
+    return [...transactions].reverse().filter(t => 
+      t.items.some(i => i.name.toLowerCase().includes(search.toLowerCase()) || i.barcode.toLowerCase().includes(search.toLowerCase())) || 
+      t.id.toLowerCase().includes(search.toLowerCase()) ||
+      (t.remarks && t.remarks.toLowerCase().includes(search.toLowerCase())) ||
+      t.date.toLowerCase().includes(search.toLowerCase()) ||
+      new Date(t.date).toLocaleString().toLowerCase().includes(search.toLowerCase())
+    );
+  }, [transactions, search]);
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50">
+      <Header>
+        <div className="px-4 w-full flex items-center">
+          <div className="relative w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              className="w-full bg-slate-100 border-none rounded-xl py-2 pl-10 pr-4 text-sm focus:ring-1 focus:ring-slate-200 shadow-inner" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+            />
+          </div>
+        </div>
+      </Header>
+
+      <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-3 pb-20">
+        {filtered.length === 0 && <div className="py-20 text-center text-slate-300 text-sm font-bold tracking-widest uppercase">No Records Found</div>}
+        {filtered.map(t => (
+          <div key={t.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden animate-in fade-in duration-300">
+            <div className={`h-1.5 ${t.type === TransactionType.PURCHASE ? 'bg-purple-500' : 'bg-emerald-500'}`} />
+            <div className="p-4">
+              <div className="flex justify-between items-start mb-3">
+                <div className="flex flex-col">
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-md mb-1 w-fit ${t.type === TransactionType.PURCHASE ? 'bg-purple-50 text-purple-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                    {t.type === TransactionType.PURCHASE ? '進貨' : '銷貨'}
+                  </span>
+                  <div className="text-[10px] text-slate-400 font-mono font-bold tracking-tight">{new Date(t.date).toLocaleString()}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm font-black text-slate-800">${Math.round(t.totalAmount).toLocaleString()}</div>
+                  {t.totalProfit !== undefined && <div className="text-[9px] font-black text-emerald-600">毛利 ${Math.round(t.totalProfit)}</div>}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {t.items.map((item, i) => (
+                  <div key={i} className="text-[11px] flex justify-between text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-100/50">
+                    <span className="font-medium">{item.name} <span className="text-slate-300 font-mono mx-1">/</span> <span className="font-black text-slate-400">x{item.quantity}</span></span>
+                    <span className="font-bold text-slate-700">${Math.round(item.price * item.quantity).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+              {t.remarks && <p className="mt-3 text-[11px] text-slate-500 font-medium bg-slate-50 p-2.5 rounded-xl border border-slate-200/50 italic leading-relaxed">「{t.remarks}」</p>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const [state, setState] = useState<InventoryState>({ products: {}, transactions: [] });
+  const [loading, setLoading] = useState(false);
+
+  const sync = useCallback(async (action: 'GET' | 'POST', payload?: any) => {
+    setLoading(true);
+    try {
+      const opts = action === 'GET' ? {} : { method: 'POST', body: JSON.stringify(payload) };
+      const res = await fetch(SCRIPT_URL, opts);
+      const data = await res.json();
+      if (action === 'GET') setState(data);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { sync('GET'); }, []);
+
+  const handleTransaction = (items: any[], type: TransactionType, remarks: string, actualTotal?: number) => {
+    const nextState = JSON.parse(JSON.stringify(state));
+    let finalAmount = actualTotal || items.reduce((acc, i) => acc + (i.price * i.quantity), 0);
+    let totalProf = 0;
+
+    items.forEach(item => {
+      const p = nextState.products[item.barcode];
+      if (type === TransactionType.PURCHASE) {
+        if (p) {
+          const newQ = p.quantity + item.quantity;
+          p.weightedAverageCost = (p.quantity * p.weightedAverageCost + item.quantity * item.price) / newQ;
+          p.quantity = newQ;
+        } else {
+          nextState.products[item.barcode] = { barcode: item.barcode, name: item.name, quantity: item.quantity, weightedAverageCost: item.price, lastUpdated: new Date().toISOString() };
+        }
+      } else {
+        if (p) {
+          totalProf += (item.price - p.weightedAverageCost) * item.quantity;
+          p.quantity -= item.quantity;
+        }
+      }
+    });
+
+    const tx: Transaction = { id: (type[0]) + Date.now(), date: new Date().toISOString(), type, items, totalAmount: finalAmount, totalProfit: type === TransactionType.SALE ? totalProf : undefined, remarks };
+    nextState.transactions.push(tx);
+    setState(nextState);
+    sync('POST', { products: nextState.products, transaction: tx });
+  };
+
+  return (
+    <Router>
+      <div className="h-full flex flex-col lg:flex-row bg-slate-50">
+        <div className={`fixed top-0 left-0 right-0 h-1 z-[60] bg-indigo-500 transition-opacity duration-500 ${loading ? 'opacity-100' : 'opacity-0'}`} />
+        <Navigation />
+        <main className="flex-1 lg:pl-20 overflow-hidden h-full">
+          <Routes>
+            <Route path="/" element={<InventoryView state={state} onUpdate={(p) => { 
+              const ns = {...state, products: {...state.products, [p.barcode]: p}}; 
+              setState(ns); sync('POST', {products: ns.products, transaction: {id:'U'+Date.now(), type: TransactionType.PURCHASE, items:[], totalAmount:0}}); 
+            }} />} />
+            <Route path="/purchase" element={<TransactionView key="PURCHASE" type={TransactionType.PURCHASE} inventory={state.products} onSubmit={handleTransaction} />} />
+            <Route path="/sale" element={<TransactionView key="SALE" type={TransactionType.SALE} inventory={state.products} onSubmit={handleTransaction} />} />
+            <Route path="/history" element={<HistoryView transactions={state.transactions} />} />
+          </Routes>
+        </main>
+      </div>
+    </Router>
+  );
+}

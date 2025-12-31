@@ -1,0 +1,8 @@
+
+{
+  "name": "Smart Stock Pro - Cloud Sync",
+  "description": "Inventory management system with Google Sheets backend integration, weighted cost calculation, and barcode scanning support.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
