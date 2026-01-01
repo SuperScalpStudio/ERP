@@ -11,7 +11,7 @@ import {
   Camera as CameraIcon,
   X,
   RefreshCw,
-  Maximize
+  Scan
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Product, Transaction, TransactionType, InventoryState } from './types';
@@ -60,44 +60,55 @@ const Navigation = () => {
 };
 
 const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
-  const [cameras, setCameras] = useState<{ id: string, label: string }[]>([]);
-  const [selectedCameraId, setSelectedCameraId] = useState<string>("");
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const [status, setStatus] = useState("正在尋找超廣角鏡頭...");
 
   useEffect(() => {
-    Html5Qrcode.getCameras().then(devices => {
-      if (devices && devices.length > 0) {
-        const mappedDevices = devices.map(d => ({ id: d.id, label: d.label }));
-        setCameras(mappedDevices);
+    const initScanner = async () => {
+      try {
+        const devices = await Html5Qrcode.getCameras();
+        if (!devices || devices.length === 0) throw new Error("找不到相機設備");
 
-        const findBestCamera = () => {
-          const lowerLabels = mappedDevices.map(d => ({ ...d, label: d.label.toLowerCase() }));
-          
-          // 強勢優先：尋找超廣角 (Ultra Wide / 0.5x)
-          const ultraWide = lowerLabels.find(d => 
-            d.label.includes('ultra') || 
-            d.label.includes('0.5') || 
-            d.label.includes('0.6') || 
-            d.label.includes('triple')
-          );
-          if (ultraWide) return ultraWide.id;
+        // 強力篩選超廣角鏡頭
+        const ultraWide = devices.find(d => {
+          const label = d.label.toLowerCase();
+          return label.includes('ultra') || label.includes('0.5') || label.includes('0.6') || label.includes('position 2');
+        });
 
-          // 次要優先：廣角 (Wide)
-          const wide = lowerLabels.find(d => d.label.includes('wide'));
-          if (wide) return wide.id;
+        // 如果找不到超廣角，則回退到最後一顆後置鏡頭 (通常是主鏡頭)
+        const targetId = ultraWide ? ultraWide.id : devices[devices.length - 1].id;
+        
+        setStatus(ultraWide ? "已鎖定超廣角鏡頭" : "已鎖定後置鏡頭");
 
-          // 三級優先：一般後置
-          const back = lowerLabels.find(d => d.label.includes('back'));
-          if (back) return back.id;
+        const html5QrCode = new Html5Qrcode("reader");
+        scannerRef.current = html5QrCode;
 
-          return mappedDevices[mappedDevices.length - 1].id;
-        };
-
-        setSelectedCameraId(findBestCamera());
+        await html5QrCode.start(
+          targetId, 
+          { 
+            fps: 30, // 壓榨掃描頻率至 30fps
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              // 針對條碼優化掃描框：寬高比約 3:1，佔螢幕寬度 80%
+              const width = Math.floor(viewfinderWidth * 0.8);
+              const height = Math.floor(width * 0.4);
+              return { width, height };
+            },
+            aspectRatio: window.innerHeight / window.innerWidth, // 適配全螢幕比例
+            disableFlip: true
+          }, 
+          (text) => {
+            onScan(text);
+            html5QrCode.stop().then(() => onClose());
+          }, 
+          () => {} // 忽略掃描中的錯誤以保持效能
+        );
+      } catch (err) {
+        setStatus("啟動失敗，請檢查權限");
+        console.error(err);
       }
-    }).catch(err => {
-      console.error("無法取得鏡頭清單", err);
-    });
+    };
+
+    initScanner();
 
     return () => {
       if (scannerRef.current?.isScanning) {
@@ -106,90 +117,49 @@ const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onC
     };
   }, []);
 
-  useEffect(() => {
-    if (!selectedCameraId) return;
-
-    const startScanner = async () => {
-      try {
-        if (scannerRef.current?.isScanning) {
-          await scannerRef.current.stop();
-        }
-        
-        const html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
-
-        await html5QrCode.start(
-          selectedCameraId, 
-          { 
-            fps: 25, 
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
-              const size = Math.floor(minEdge * 0.7);
-              return { width: size, height: size * 0.6 }; // 針對條碼改為長方形框
-            },
-            aspectRatio: 1.0
-          }, 
-          (text) => {
-            onScan(text);
-            html5QrCode.stop().then(() => onClose());
-          }, 
-          undefined
-        );
-      } catch (err) {
-        console.error("掃描器啟動失敗", err);
-      }
-    };
-
-    startScanner();
-  }, [selectedCameraId]);
-
   return (
-    <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-between safe-top safe-bottom">
-      {/* 頂部浮層：控制鏡頭 */}
-      <div className="absolute top-0 left-0 right-0 p-4 z-10 flex flex-col gap-2 items-center">
-        {cameras.length > 1 && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl px-3 py-2 flex items-center gap-3 w-full max-w-[280px]">
-            <RefreshCw size={14} className="text-white/60" />
-            <select 
-              className="flex-1 bg-transparent text-xs font-bold text-white outline-none appearance-none"
-              value={selectedCameraId}
-              onChange={(e) => setSelectedCameraId(e.target.value)}
-            >
-              {cameras.map((cam, idx) => (
-                <option key={cam.id} value={cam.id} className="text-slate-900">
-                  鏡頭 {idx + 1}: {cam.label.includes('Back') ? '後置' : cam.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-      </div>
+    <div className="fixed inset-0 bg-black z-[100] flex flex-col overflow-hidden">
+      {/* 掃描底層 */}
+      <div id="reader" className="absolute inset-0 w-full h-full object-cover"></div>
 
-      {/* 掃描核心區域 */}
-      <div id="reader" className="w-full h-full bg-black overflow-hidden relative">
-        {/* 自定義掃描框裝飾 */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-[70%] aspect-[5/3] border-2 border-white/30 rounded-3xl relative">
-            <div className="absolute inset-0 border-2 border-indigo-500 rounded-3xl opacity-50 animate-pulse" />
-            <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-red-500/50 shadow-[0_0_15px_rgba(239,68,68,0.8)] animate-bounce" />
-          </div>
+      {/* 介面裝飾層 */}
+      <div className="relative flex-1 flex flex-col items-center justify-between p-6 pointer-events-none">
+        {/* 頂部：狀態顯示 */}
+        <div className="mt-12 px-4 py-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
+          <p className="text-[10px] text-white font-bold tracking-[0.2em] uppercase flex items-center gap-2">
+            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            {status}
+          </p>
         </div>
-      </div>
-      
-      {/* 底部浮層：關閉與提示 */}
-      <div className="absolute bottom-0 left-0 right-0 p-6 z-10 bg-gradient-to-t from-black/80 to-transparent pt-12">
-        <div className="max-w-xs mx-auto space-y-4">
-          <p className="text-center text-[11px] text-white/60 font-medium uppercase tracking-widest bg-white/5 py-1.5 rounded-full backdrop-blur-sm">
-            請將條碼對準框線中心
+
+        {/* 中間：對焦框輔助線 */}
+        <div className="w-[85%] aspect-[5/2] border-2 border-white/20 rounded-3xl relative flex items-center justify-center overflow-hidden">
+            {/* 角隅裝飾 */}
+            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-indigo-500 rounded-tl-lg" />
+            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-indigo-500 rounded-tr-lg" />
+            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-indigo-500 rounded-bl-lg" />
+            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-indigo-500 rounded-br-lg" />
+            
+            {/* 掃描紅線 */}
+            <div className="w-[90%] h-0.5 bg-red-500/80 shadow-[0_0_15px_rgba(239,68,68,1)] animate-[bounce_1.5s_infinite]" />
+        </div>
+
+        {/* 底部：操作按鈕區 */}
+        <div className="w-full max-w-xs mb-8 pointer-events-auto">
+          <p className="text-center text-[11px] text-white/50 mb-6 font-medium">
+            請將條碼對準中心橫線
           </p>
           <button 
             onClick={onClose} 
-            className="w-full py-4 bg-white text-slate-900 rounded-2xl font-black text-sm active:scale-95 transition-all flex items-center justify-center gap-2 shadow-xl shadow-black/20"
+            className="w-full py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-xl rounded-2xl font-black text-sm active:scale-95 transition-all flex items-center justify-center gap-2 shadow-2xl"
           >
-            <X size={20} /> 結束掃描
+            <X size={20} /> 關閉掃描模式
           </button>
         </div>
       </div>
+      
+      {/* 底部安全距離填充 */}
+      <div className="safe-bottom bg-black/40" />
     </div>
   );
 };
