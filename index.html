@@ -18,31 +18,27 @@
         input[type="number"]::-webkit-inner-spin-button, 
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         
-        /* 掃描器最底層黑化 */
+        /* 掃描器 CSS 徹底淨化 */
         #reader {
             border: none !important;
             background: black !important;
             width: 100% !important;
             height: 100% !important;
+            overflow: hidden !important;
         }
-
-        /* 影片元素強制填滿 */
         #reader video { 
             object-fit: cover !important; 
             width: 100% !important; 
             height: 100% !important;
         }
-
-        /* 徹底刪除套件內建的白色掃描框與任何裝飾 */
+        /* 移除套件所有自動生成的框框與邊緣 */
         #reader__scan_region, 
-        #reader__scan_region div, 
-        #reader__scan_region canvas {
+        #reader__scan_region * {
             border: none !important;
             box-shadow: none !important;
             outline: none !important;
         }
-
-        /* 隱藏所有內建文字與按鈕 */
+        /* 移除所有文字提示、儀表板與內建按鈕 */
         #reader__dashboard, 
         #reader__header_message, 
         #reader__status_span,
