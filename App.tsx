@@ -240,8 +240,8 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
           </div>
           {type === TransactionType.PURCHASE && (
             <div className="bg-slate-200/50 p-1 rounded-xl flex text-[10px] font-black">
-              <button onClick={() => setCurrency('TWD')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'TWD' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-50'}`}>TWD</button>
-              <button onClick={() => setCurrency('EUR')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'EUR' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-50'}`}>EUR</button>
+              <button onClick={() => setCurrency('TWD')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'TWD' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>TWD</button>
+              <button onClick={() => setCurrency('EUR')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'EUR' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>EUR</button>
             </div>
           )}
         </div>
@@ -262,11 +262,11 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
           <div className="grid grid-cols-2 gap-3">
             <div className="relative">
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">數量</span>
-              <input type="number" className={inputClass + " font-bold"} value={qty} onWheel={handleWheel} onChange={e => setQty(e.target.value)} />
+              <input type="number" inputMode="decimal" className={inputClass + " font-bold"} value={qty} onWheel={handleWheel} onChange={e => setQty(e.target.value)} />
             </div>
             <div className="relative">
               <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-300">{currency}</span>
-              <input type="number" className={inputClass + " font-bold"} value={price} onWheel={handleWheel} onChange={e => setPrice(e.target.value)} />
+              <input type="number" inputMode="decimal" className={inputClass + " font-bold"} value={price} onWheel={handleWheel} onChange={e => setPrice(e.target.value)} />
             </div>
           </div>
           <button onClick={addItem} className={`w-full py-3.5 ${type === TransactionType.PURCHASE ? 'bg-purple-600' : 'bg-emerald-600'} text-white rounded-xl font-black text-sm active:scale-95 transition-all`}>
@@ -304,7 +304,7 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
               {type === TransactionType.PURCHASE && currency === 'EUR' ? (
                 <div className="space-y-1">
                   <p className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider ml-1">台幣總金額（含運費及稅金）</p>
-                  <input type="number" placeholder="必填：請手動輸入最終總額" className="w-full bg-slate-800 border-none rounded-xl py-3 px-4 text-base text-white font-black placeholder:text-slate-600 placeholder:font-normal" onWheel={handleWheel} value={totalBill} onChange={e => setTotalBill(e.target.value)} />
+                  <input type="number" inputMode="decimal" placeholder="必填：請手動輸入最終總額" className="w-full bg-slate-800 border-none rounded-xl py-3 px-4 text-base text-white font-black placeholder:text-slate-600 placeholder:font-normal" onWheel={handleWheel} value={totalBill} onChange={e => setTotalBill(e.target.value)} />
                 </div>
               ) : (
                 <div className="space-y-1">
