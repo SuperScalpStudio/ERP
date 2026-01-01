@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
@@ -24,10 +23,9 @@ const inputClass = "w-full bg-white border border-slate-200/50 rounded-xl py-2.5
 
 // --- 共用組件 ---
 
-// Fix: Change Header props to allow optional children to resolve "missing children" TS error
 const Header = ({ children }: { children?: React.ReactNode }) => (
   <div className={topBarClass}>
-    <div className="h-16 flex items-center">
+    <div className="h-14 flex items-center">
       {children}
     </div>
   </div>
@@ -96,41 +94,55 @@ const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (
     .sort((a, b) => b.quantity - a.quantity);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full bg-slate-50/50">
       <Header>
         <div className="grid grid-cols-3 w-full divide-x divide-slate-100">
           <div className="flex flex-col items-center justify-center">
-            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter">庫存資產</p>
-            <p className="text-[13px] font-black text-slate-900">${Math.round(stats.cost).toLocaleString()}</p>
+            <p className="text-[8px] font-extrabold text-slate-400 uppercase tracking-tighter">庫存資產</p>
+            <p className="text-[12px] font-black text-slate-900">${Math.round(stats.cost).toLocaleString()}</p>
           </div>
           <div className="flex flex-col items-center justify-center">
-            <p className="text-[9px] font-extrabold text-indigo-400 uppercase tracking-tighter">累計獲利</p>
-            <p className="text-[13px] font-black text-indigo-600">${Math.round(stats.profit).toLocaleString()}</p>
+            <p className="text-[8px] font-extrabold text-indigo-400 uppercase tracking-tighter">累計獲利</p>
+            <p className="text-[12px] font-black text-indigo-600">${Math.round(stats.profit).toLocaleString()}</p>
           </div>
           <div className="flex flex-col items-center justify-center">
-            <p className="text-[9px] font-extrabold text-slate-400 uppercase tracking-tighter">品項總數</p>
-            <p className="text-[13px] font-black text-slate-600">{stats.count}</p>
+            <p className="text-[8px] font-extrabold text-slate-400 uppercase tracking-tighter">品項總數</p>
+            <p className="text-[12px] font-black text-slate-600">{stats.count}</p>
           </div>
         </div>
       </Header>
       
-      <div className="flex-1 overflow-y-auto no-scrollbar p-4 space-y-4 pb-32">
+      <div className="flex-1 overflow-y-auto no-scrollbar p-3 space-y-3 pb-32">
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
-          <input type="text" className={inputClass + " pl-10 border-none shadow-sm"} value={search} onChange={e => setSearch(e.target.value)} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+          <input 
+            type="text" 
+            placeholder="搜尋商品..."
+            className="w-full bg-white border border-slate-200/50 rounded-xl py-2 pl-9 pr-4 text-sm focus:ring-2 focus:ring-indigo-500 transition-all shadow-sm" 
+            value={search} 
+            onChange={e => setSearch(e.target.value)} 
+          />
         </div>
-        <div className="grid gap-2">
+        <div className="grid gap-1.5">
           {filtered.map(p => (
-            <div key={p.barcode} className="bg-white p-4 rounded-2xl border border-slate-100 flex justify-between items-center shadow-sm active:bg-slate-50 transition-colors">
-              <div>
-                <h4 className="font-bold text-sm text-slate-800">{p.name}</h4>
-                <p className="text-[10px] font-mono text-slate-400">{p.barcode}</p>
-                <div className="flex gap-3 mt-1.5 items-center">
-                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${p.quantity <= 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'}`}>存: {p.quantity}</span>
-                  <span className="text-[10px] text-slate-400 font-bold">成本: ${Math.round(p.weightedAverageCost)}</span>
+            <div 
+              key={p.barcode} 
+              onClick={() => setEditing(p)}
+              className="bg-white p-3 rounded-xl border border-slate-100 flex justify-between items-center shadow-sm active:scale-[0.98] active:bg-slate-50 cursor-pointer transition-all duration-150 hover:border-indigo-100"
+            >
+              <div className="flex-1 min-w-0 pr-2">
+                <h4 className="font-bold text-[13px] text-slate-800 truncate leading-tight mb-1">{p.name}</h4>
+                <div className="flex items-center gap-2">
+                  <span className="text-[9px] font-mono text-slate-400 bg-slate-50 px-1 rounded uppercase tracking-tighter border border-slate-100">#{p.barcode}</span>
+                  <span className="text-[9px] text-slate-400 font-bold">成本: ${Math.round(p.weightedAverageCost)}</span>
                 </div>
               </div>
-              <button onClick={() => setEditing(p)} className="text-slate-200 hover:text-indigo-600 p-2"><Edit2 size={16} /></button>
+              
+              <div className="flex items-center gap-2 shrink-0">
+                <div className={`px-2.5 py-1.5 rounded-lg text-center min-w-[40px] ${p.quantity <= 0 ? 'bg-red-50 text-red-600' : 'bg-slate-50 text-slate-600'}`}>
+                  <p className="text-[11px] font-black leading-none">{p.quantity}</p>
+                </div>
+              </div>
             </div>
           ))}
         </div>
@@ -138,12 +150,20 @@ const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (
 
       {editing && (
         <div className="fixed inset-0 bg-black/50 z-[110] flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-xl">
-            <h3 className="font-black text-sm mb-4">修改品名</h3>
-            <input type="text" className={inputClass} value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})} />
-            <div className="flex gap-3 mt-6">
-              <button onClick={() => setEditing(null)} className="flex-1 py-3 text-sm font-bold text-slate-400">取消</button>
-              <button onClick={() => { onUpdate(editing); setEditing(null); }} className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-sm font-bold">更新</button>
+          <div className="bg-white w-full max-w-xs rounded-3xl p-6 shadow-xl animate-in fade-in zoom-in duration-200">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="font-black text-sm text-slate-800">編輯商品資訊</h3>
+              <span className="text-[10px] font-mono text-slate-400 tracking-tighter">#{editing.barcode}</span>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-1.5 ml-1">品名</p>
+                <input type="text" className={inputClass} value={editing.name} onChange={e => setEditing({...editing, name: e.target.value})} />
+              </div>
+            </div>
+            <div className="flex gap-3 mt-8">
+              <button onClick={() => setEditing(null)} className="flex-1 py-3 text-sm font-bold text-slate-400 active:scale-95 transition-transform">取消</button>
+              <button onClick={() => { onUpdate(editing); setEditing(null); }} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-200 active:scale-95 transition-transform">儲存更新</button>
             </div>
           </div>
         </div>
@@ -152,7 +172,6 @@ const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (
   );
 };
 
-// Fix: Add optional key to TransactionView props type to resolve TS error when passing key in JSX
 const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType, inventory: Record<string, Product>, onSubmit: (items: any[], type: TransactionType, remarks: string, actualTotal?: number) => void, key?: React.Key }) => {
   const [currency, setCurrency] = useState<'TWD' | 'EUR'>(type === TransactionType.PURCHASE ? 'EUR' : 'TWD');
   const [items, setItems] = useState<any[]>([]);
@@ -194,7 +213,6 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
 
     onSubmit(processedItems, type, remarks, finalTotal);
     
-    // 提交後徹底恢復初始狀態
     setItems([]);
     setTotalBill('');
     setRemarks('');
@@ -222,8 +240,8 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
           </div>
           {type === TransactionType.PURCHASE && (
             <div className="bg-slate-200/50 p-1 rounded-xl flex text-[10px] font-black">
-              <button onClick={() => setCurrency('TWD')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'TWD' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>TWD</button>
-              <button onClick={() => setCurrency('EUR')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'EUR' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-500'}`}>EUR</button>
+              <button onClick={() => setCurrency('TWD')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'TWD' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-50'}`}>TWD</button>
+              <button onClick={() => setCurrency('EUR')} className={`px-3 py-1.5 rounded-lg transition-all ${currency === 'EUR' ? 'bg-white shadow-sm text-slate-900' : 'text-slate-50'}`}>EUR</button>
             </div>
           )}
         </div>
