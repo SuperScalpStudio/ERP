@@ -78,12 +78,32 @@ const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onC
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
     
-    // 全螢幕秒讀模式：不傳入 qrbox 與 aspectRatio
+    // 強化掃描靈敏度的配置
+    const config = { 
+      fps: 30, // 保持穩定流暢
+      qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+        // 明確告訴引擎：掃描全螢幕區域
+        return { width: viewfinderWidth, height: viewfinderHeight };
+      },
+      // 關鍵：啟用瀏覽器原生硬體加速解碼 (大幅提升靈敏度)
+      experimentalFeatures: {
+        useBarCodeDetectorIfSupported: true
+      },
+      // 禁用翻轉計算以節省 CPU
+      disableFlip: true
+    };
+
+    const cameraConfig = {
+      facingMode: "environment",
+      // 要求 HD 解析度以識別細小條碼
+      aspectRatio: 1.7777778, // 16:9
+      width: { ideal: 1280 },
+      height: { ideal: 720 }
+    };
+    
     html5QrCode.start(
-      { facingMode: "environment" }, 
-      { 
-        fps: 30,
-      }, 
+      cameraConfig, 
+      config, 
       (text) => {
         if (navigator.vibrate) navigator.vibrate(60);
         onScan(text);
@@ -132,7 +152,6 @@ const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (
 
   const filtered = Object.values(state.products)
     .filter(p => p.name.toLowerCase().includes(search.toLowerCase()) || p.barcode.toLowerCase().includes(search.toLowerCase()))
-    // 嚴格依品名排序 (中文排序)
     .sort((a, b) => a.name.localeCompare(b.name, 'zh-Hant'));
 
   return (
