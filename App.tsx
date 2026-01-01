@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { HashRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { 
   PackagePlus, 
@@ -8,10 +8,8 @@ import {
   Trash2,
   Search,
   Edit2,
-  Camera as CameraIcon,
-  X,
-  RefreshCw,
-  Scan
+  Camera,
+  X
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { Product, Transaction, TransactionType, InventoryState } from './types';
@@ -60,106 +58,21 @@ const Navigation = () => {
 };
 
 const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
-  const scannerRef = useRef<Html5Qrcode | null>(null);
-  const [status, setStatus] = useState("正在尋找超廣角鏡頭...");
-
   useEffect(() => {
-    const initScanner = async () => {
-      try {
-        const devices = await Html5Qrcode.getCameras();
-        if (!devices || devices.length === 0) throw new Error("找不到相機設備");
-
-        // 強力篩選超廣角鏡頭
-        const ultraWide = devices.find(d => {
-          const label = d.label.toLowerCase();
-          return label.includes('ultra') || label.includes('0.5') || label.includes('0.6') || label.includes('position 2');
-        });
-
-        // 如果找不到超廣角，則回退到最後一顆後置鏡頭 (通常是主鏡頭)
-        const targetId = ultraWide ? ultraWide.id : devices[devices.length - 1].id;
-        
-        setStatus(ultraWide ? "已鎖定超廣角鏡頭" : "已鎖定後置鏡頭");
-
-        const html5QrCode = new Html5Qrcode("reader");
-        scannerRef.current = html5QrCode;
-
-        await html5QrCode.start(
-          targetId, 
-          { 
-            fps: 30, // 壓榨掃描頻率至 30fps
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              // 針對條碼優化掃描框：寬高比約 3:1，佔螢幕寬度 80%
-              const width = Math.floor(viewfinderWidth * 0.8);
-              const height = Math.floor(width * 0.4);
-              return { width, height };
-            },
-            aspectRatio: window.innerHeight / window.innerWidth, // 適配全螢幕比例
-            disableFlip: true
-          }, 
-          (text) => {
-            onScan(text);
-            html5QrCode.stop().then(() => onClose());
-          }, 
-          () => {} // 忽略掃描中的錯誤以保持效能
-        );
-      } catch (err) {
-        setStatus("啟動失敗，請檢查權限");
-        console.error(err);
-      }
-    };
-
-    initScanner();
-
-    return () => {
-      if (scannerRef.current?.isScanning) {
-        scannerRef.current.stop().catch(() => {});
-      }
-    };
+    const html5QrCode = new Html5Qrcode("reader");
+    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } }, (text) => {
+      onScan(text);
+      html5QrCode.stop().then(() => onClose());
+    }, undefined).catch(() => { alert("無法開啟相機"); onClose(); });
+    return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(() => {}); };
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black z-[100] flex flex-col overflow-hidden">
-      {/* 掃描底層 */}
-      <div id="reader" className="absolute inset-0 w-full h-full object-cover"></div>
-
-      {/* 介面裝飾層 */}
-      <div className="relative flex-1 flex flex-col items-center justify-between p-6 pointer-events-none">
-        {/* 頂部：狀態顯示 */}
-        <div className="mt-12 px-4 py-2 bg-black/40 backdrop-blur-md rounded-full border border-white/10">
-          <p className="text-[10px] text-white font-bold tracking-[0.2em] uppercase flex items-center gap-2">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            {status}
-          </p>
-        </div>
-
-        {/* 中間：對焦框輔助線 */}
-        <div className="w-[85%] aspect-[5/2] border-2 border-white/20 rounded-3xl relative flex items-center justify-center overflow-hidden">
-            {/* 角隅裝飾 */}
-            <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-indigo-500 rounded-tl-lg" />
-            <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-indigo-500 rounded-tr-lg" />
-            <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-indigo-500 rounded-bl-lg" />
-            <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-indigo-500 rounded-br-lg" />
-            
-            {/* 掃描紅線 */}
-            <div className="w-[90%] h-0.5 bg-red-500/80 shadow-[0_0_15px_rgba(239,68,68,1)] animate-[bounce_1.5s_infinite]" />
-        </div>
-
-        {/* 底部：操作按鈕區 */}
-        <div className="w-full max-w-xs mb-8 pointer-events-auto">
-          <p className="text-center text-[11px] text-white/50 mb-6 font-medium">
-            請將條碼對準中心橫線
-          </p>
-          <button 
-            onClick={onClose} 
-            className="w-full py-4 bg-white/10 hover:bg-white/20 text-white border border-white/20 backdrop-blur-xl rounded-2xl font-black text-sm active:scale-95 transition-all flex items-center justify-center gap-2 shadow-2xl"
-          >
-            <X size={20} /> 關閉掃描模式
-          </button>
-        </div>
+    <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+      <div className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl">
+        <div id="reader" className="w-full aspect-square bg-black"></div>
+        <button onClick={onClose} className="w-full py-5 text-slate-500 font-bold flex items-center justify-center gap-2"><X size={18} /> 關閉掃描器</button>
       </div>
-      
-      {/* 底部安全距離填充 */}
-      <div className="safe-bottom bg-black/40" />
     </div>
   );
 };
@@ -171,7 +84,7 @@ const InventoryView = ({ state, onUpdate }: { state: InventoryState, onUpdate: (
   const [editing, setEditing] = useState<Product | null>(null);
 
   const stats = useMemo(() => {
-    const cost = Object.values(state.products).reduce((acc, p) => acc + ((Number(p.quantity) || 0) * (Number(p.weightedAverageCost) || 0)), 0);
+    const cost = Object.values(state.products).reduce((acc, p) => acc + ((p.quantity || 0) * (p.weightedAverageCost || 0)), 0);
     const profit = state.transactions.filter(t => t.type === TransactionType.SALE).reduce((acc, t) => acc + (t.totalProfit || 0), 0);
     return { cost, profit, count: Object.keys(state.products).length };
   }, [state]);
@@ -297,7 +210,7 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
       const rate = totalEur !== 0 ? finalTotal / totalEur : 1;
       processedItems = items.map(i => ({ ...i, price: i.price * rate }));
     } else if (type === TransactionType.SALE) {
-      processedItems = items.map(i => ({ ...i, profit: (i.price - (i.cost || 0)) * i.quantity }));
+      processedItems = items.map(i => ({ ...i, profit: i.price - i.cost }));
     }
 
     onSubmit(processedItems, type, remarks, finalTotal);
@@ -345,7 +258,7 @@ const TransactionView = ({ type, inventory, onSubmit }: { type: TransactionType,
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
               <input type="text" placeholder="輸入或掃描條碼..." className={inputClass + " pl-10"} value={barcode} onChange={e => lookup(e.target.value)} />
             </div>
-            <button onClick={() => setScanner(true)} className="bg-slate-900 text-white p-2.5 rounded-xl active:scale-90 transition-transform"><CameraIcon size={20} /></button>
+            <button onClick={() => setScanner(true)} className="bg-slate-900 text-white p-2.5 rounded-xl active:scale-90 transition-transform"><Camera size={20} /></button>
           </div>
           <input type="text" placeholder="商品名稱" className={inputClass} value={name} onChange={e => setName(e.target.value)} />
           <div className="grid grid-cols-2 gap-3">
@@ -510,6 +423,7 @@ export default function App() {
           const oldWAC = Number(p.weightedAverageCost) || 0;
           const newQ = oldQ + item.quantity;
           
+          // 加權平均成本：防呆除以 0 
           if (newQ !== 0) {
             p.weightedAverageCost = (oldQ * oldWAC + item.quantity * item.price) / newQ;
           } else {
