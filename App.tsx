@@ -25,15 +25,12 @@ const inputClass = "w-full bg-white border border-slate-200/50 rounded-xl py-2.5
 
 // --- 共用組件 ---
 
-// 優化後的極簡深灰毛玻璃載入遮罩
 const LoadingOverlay = ({ visible }: { visible: boolean }) => {
   if (!visible) return null;
   return (
     <div className="fixed inset-0 z-[200] flex flex-col items-center justify-center bg-slate-950/90 backdrop-blur-2xl animate-in fade-in duration-500 pointer-events-auto">
       <div className="relative mb-6">
-        {/* 核心旋轉圖示 */}
         <Loader2 className="text-indigo-400 animate-spin" size={48} strokeWidth={2.5} />
-        {/* 背景微光暈 */}
         <div className="absolute inset-0 blur-3xl bg-indigo-500/30 rounded-full animate-pulse"></div>
       </div>
       <p className="text-white/80 font-black text-[12px] tracking-[0.4em] uppercase ml-2 animate-pulse">
@@ -80,18 +77,77 @@ const Navigation = () => {
 const ScannerModal = ({ onScan, onClose }: { onScan: (data: string) => void, onClose: () => void }) => {
   useEffect(() => {
     const html5QrCode = new Html5Qrcode("reader");
-    html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: { width: 250, height: 150 } }, (text) => {
-      onScan(text);
-      html5QrCode.stop().then(() => onClose());
-    }, undefined).catch(() => { alert("無法開啟相機"); onClose(); });
-    return () => { if (html5QrCode.isScanning) html5QrCode.stop().catch(() => {}); };
+    
+    // 動態計算掃描框：寬度為視窗 75%，高度固定為適合條碼的扁平比例
+    const qrboxFunction = (viewfinderWidth: number, viewfinderHeight: number) => {
+      const boxWidth = Math.floor(viewfinderWidth * 0.75);
+      const boxHeight = 160; 
+      return { width: boxWidth, height: boxHeight };
+    };
+
+    html5QrCode.start(
+      { facingMode: "environment" }, 
+      { 
+        fps: 20, 
+        qrbox: qrboxFunction,
+        aspectRatio: 1.0 
+      }, 
+      (text) => {
+        if (navigator.vibrate) navigator.vibrate(50); // 震動回饋
+        onScan(text);
+        html5QrCode.stop().then(() => onClose());
+      }, 
+      undefined
+    ).catch(() => { 
+      alert("無法開啟相機，請確認權限設定"); 
+      onClose(); 
+    });
+
+    return () => { 
+      if (html5QrCode.isScanning) {
+        html5QrCode.stop().catch(() => {}); 
+      }
+    };
   }, []);
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
-      <div className="w-full max-w-sm bg-white rounded-3xl overflow-hidden shadow-2xl">
-        <div id="reader" className="w-full aspect-square bg-black"></div>
-        <button onClick={onClose} className="w-full py-5 text-slate-500 font-bold flex items-center justify-center gap-2"><X size={18} /> 關閉掃描器</button>
+    <div className="fixed inset-0 bg-black z-[100] flex flex-col overflow-hidden animate-in fade-in duration-300">
+      {/* 掃描器背景預覽 */}
+      <div id="reader" className="absolute inset-0 w-full h-full bg-black"></div>
+      
+      {/* 沉浸式 UI 遮罩與定位框 */}
+      <div className="absolute inset-0 z-10 pointer-events-none flex flex-col">
+        {/* 上方遮罩 */}
+        <div className="flex-1 bg-black/60"></div>
+        
+        {/* 中間掃描帶 (包含挖空與 L 型線條) */}
+        <div className="flex h-[160px]">
+          <div className="flex-1 bg-black/60"></div>
+          <div className="w-[75vw] relative">
+            {/* 四角 L 型線條 (靛藍色) */}
+            <div className="absolute top-0 left-0 w-8 h-8 border-t-[5px] border-l-[5px] border-indigo-500 rounded-tl-sm"></div>
+            <div className="absolute top-0 right-0 w-8 h-8 border-t-[5px] border-r-[5px] border-indigo-500 rounded-tr-sm"></div>
+            <div className="absolute bottom-0 left-0 w-8 h-8 border-b-[5px] border-l-[5px] border-indigo-500 rounded-bl-sm"></div>
+            <div className="absolute bottom-0 right-0 w-8 h-8 border-b-[5px] border-r-[5px] border-indigo-500 rounded-br-sm"></div>
+          </div>
+          <div className="flex-1 bg-black/60"></div>
+        </div>
+        
+        {/* 下方遮罩與指引文字 */}
+        <div className="flex-1 bg-black/60 flex flex-col items-center pt-10">
+          <p className="text-white/90 text-[14px] font-black tracking-[0.2em] uppercase mb-3">請將條碼對準框內</p>
+          <div className="w-12 h-1 bg-white/20 rounded-full"></div>
+        </div>
+      </div>
+
+      {/* 取消按鈕 */}
+      <div className="absolute bottom-16 left-0 right-0 z-20 flex justify-center px-8">
+        <button 
+          onClick={onClose} 
+          className="bg-white/10 backdrop-blur-xl border border-white/20 text-white px-10 py-4 rounded-2xl font-black text-sm active:scale-95 transition-all flex items-center gap-2 shadow-2xl"
+        >
+          <X size={18} /> 取消掃描
+        </button>
       </div>
     </div>
   );
